@@ -1,0 +1,25 @@
+{
+  "name": "fast-ssdeep",
+  "version": "1.0.0",
+  "description": "Node.js binding for the ssdeep CTPH library",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memcorrupt/fast-ssdeep.git"
+  },
+  "keywords": [
+    "ssdeep",
+    "ctph",
+    "hashing",
+    "fuzzy"
+  ],
+  "author": "memcorrupt <mem@mem.rip>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/memcorrupt/fast-ssdeep/issues"
+  },
+  "homepage": "https://github.com/memcorrupt/fast-ssdeep#readme"
+}
