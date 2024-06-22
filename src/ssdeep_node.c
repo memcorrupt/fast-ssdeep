@@ -1,7 +1,10 @@
 #define NAPI_VERSION 3
+
+#include <errno.h>
 #include <node_api.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include "fuzzy.h"
 
 //TODO: general code cleanup to make this FOSS worthy
@@ -23,7 +26,7 @@ struct FuzzyHashTask {
     napi_value promise;
     napi_async_work work;
     
-    char *buffer;
+    unsigned char *buffer;
     size_t length;
 
     int error;
@@ -59,7 +62,7 @@ static void FuzzyHashWorkerComplete(napi_env env, napi_status status, void *data
         status = napi_resolve_deferred(env, task->deferred, result);
     }else{
         char formatErr[256];
-        sprintf_s(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s\n", strerror(task->error));
+        snprintf(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s\n", strerror(task->error));
 
         napi_value errorMsg;
         status = napi_create_string_latin1(env, formatErr, NAPI_AUTO_LENGTH, &errorMsg);
@@ -130,8 +133,8 @@ static napi_value FuzzyHash(napi_env env, napi_callback_info cbinfo){
     status = napi_get_value_string_latin1(env, args[0], NULL, 0, &inputSize);
     if(status != napi_ok) return NULL;
 
-    char *buf = malloc(inputSize + 1);
-    status = napi_get_value_string_latin1(env, args[0], buf, inputSize + 1, &inputSize);
+    unsigned char *buf = malloc(inputSize + 1);
+    status = napi_get_value_string_latin1(env, args[0], (char *)buf, inputSize + 1, &inputSize);
     if(status != napi_ok) return NULL;
 
     struct FuzzyHashTask *task = (struct FuzzyHashTask *)malloc(sizeof(struct FuzzyHashTask));
@@ -231,8 +234,8 @@ static napi_value FuzzyHashSync(napi_env env, napi_callback_info cbinfo){
     status = napi_get_value_string_latin1(env, args[0], NULL, 0, &inputSize);
     if(status != napi_ok) return NULL;
 
-    char *buf = malloc(inputSize + 1);
-    status = napi_get_value_string_latin1(env, args[0], buf, inputSize + 1, &inputSize);
+    unsigned char *buf = malloc(inputSize + 1);
+    status = napi_get_value_string_latin1(env, args[0], (char *)buf, inputSize + 1, &inputSize);
     if(status != napi_ok) return NULL;
 
     char hash[FUZZY_MAX_RESULT];
@@ -245,7 +248,7 @@ static napi_value FuzzyHashSync(napi_env env, napi_callback_info cbinfo){
         errno_t error = errno;
 
         char formatErr[256];
-        sprintf_s(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s\n", strerror(error));
+        snprintf(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s\n", strerror(error));
 
         status = napi_throw_error(env, NULL, formatErr);
         if(status != napi_ok) return NULL;
