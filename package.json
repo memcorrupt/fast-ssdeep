@@ -4,8 +4,15 @@
   "description": "Node.js binding for the ssdeep CTPH library",
   "main": "index.js",
   "scripts": {
+    "build": "node-gyp build",
+    "install": "node-gyp rebuild",
     "test": "mocha"
   },
+  "files": [
+    "src",
+    "binding.gyp",
+    "index.js"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/memcorrupt/fast-ssdeep.git"
@@ -23,6 +30,10 @@
   },
   "homepage": "https://github.com/memcorrupt/fast-ssdeep#readme",
   "devDependencies": {
-    "mocha": "^10.4.0"
+    "mocha": "^10.4.0",
+    "prettier": "^3.3.2"
+  },
+  "dependencies": {
+    "node-gyp": "^10.1.0"
   }
 }
