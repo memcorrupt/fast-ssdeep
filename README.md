@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/npm/v/fast-ssdeep.svg)](https://www.npmjs.org/package/fast-ssdeep)
 [![Downloads](https://img.shields.io/npm/dm/fast-ssdeep.svg)](https://www.npmjs.com/package/fast-ssdeep)
-[![Build Status](https://github.com/memcorrupt/fast-ssdeep/actions/workflows/release.yml/badge.svg)](https://github.com/memcorrupt/fast-ssdeep/actions/workflows/build.yml)
+[![Build Status](https://github.com/memcorrupt/fast-ssdeep/actions/workflows/build.yml/badge.svg)](https://github.com/memcorrupt/fast-ssdeep/actions/workflows/build.yml)
 [![License](https://img.shields.io/github/license/memcorrupt/fast-ssdeep)](LICENSE)
 
 Node.js binding for the ssdeep CTPH library.
