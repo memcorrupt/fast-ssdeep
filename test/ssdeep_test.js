@@ -44,7 +44,8 @@ describe("should generate correct hashes", function(){
 describe("should return proper similarity values", function(){
     const comparisons = [
         ["3:AXGBicFlgVNhBGcL6wCrFQEv:AXGHsNhxLsr2C", "3:AXGBicFlIHBGcL6wCrFQEv:AXGH6xLsr2C", 22],
-        ["3:a+JraNvsgzsVqSwHq9:tJuOgzsko", "3:a+JraNvsg7QhyqzWwHq9:tJuOg7Q4Wo", 18]
+        ["3:a+JraNvsgzsVqSwHq9:tJuOgzsko", "3:a+JraNvsg7QhyqzWwHq9:tJuOg7Q4Wo", 18],
+        ["3:AXGBicFlF:AXGHR", "3:AXGBicFlgVNhBGcL6wCrFQEv:AXGHsNhxLsr2C", 9]
     ];
 
     describe("synchronous", function(){
