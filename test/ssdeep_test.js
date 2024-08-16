@@ -1,6 +1,6 @@
 const assert = require("assert");
 const { describe, it } = require("mocha");
-const ssdeep = require('bindings')('fast-ssdeep.node');
+const ssdeep = require("../");
 
 describe("should generate correct hashes", function(){
     const hashes = {

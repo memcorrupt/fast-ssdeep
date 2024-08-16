@@ -1,8 +1,9 @@
 {
   "name": "fast-ssdeep",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Node.js binding for the ssdeep CTPH library",
   "main": "index.js",
+  "types": "index.d.ts",
   "engines": {
     "node": ">= 10.0.0"
   },
@@ -20,6 +21,7 @@
     "ssdeep/edit_dist.h",
     "ssdeep/sum_table.h",
     "index.js",
+    "index.d.ts",
     "binding.gyp"
   ],
   "repository": {
