@@ -41,7 +41,7 @@
   },
   "homepage": "https://github.com/memcorrupt/fast-ssdeep#readme",
   "devDependencies": {
-    "mocha": "^10.5.2"
+    "mocha": "^10.7.3"
   },
   "dependencies": {
     "bindings": "^1.5.0"
