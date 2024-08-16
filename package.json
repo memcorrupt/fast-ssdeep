@@ -1,0 +1,49 @@
+{
+  "name": "fast-ssdeep",
+  "version": "1.0.0",
+  "description": "Node.js binding for the ssdeep CTPH library",
+  "main": "index.js",
+  "engines": {
+    "node": ">= 10.0.0"
+  },
+  "scripts": {
+    "test": "mocha",
+    "build": "node-gyp build",
+    "install": "node-gyp rebuild"
+  },
+  "files": [
+    "src",
+    "test",
+
+    "ssdeep/fuzzy.c",
+    "ssdeep/edit_dist.c",
+    "ssdeep/fuzzy.h",
+    "ssdeep/edit_dist.h",
+    "ssdeep/sum_table.h",
+
+    "index.js",
+    "binding.gyp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memcorrupt/fast-ssdeep.git"
+  },
+  "keywords": [
+    "ssdeep",
+    "ctph",
+    "hashing",
+    "fuzzy"
+  ],
+  "author": "memcorrupt <mem@mem.rip>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/memcorrupt/fast-ssdeep/issues"
+  },
+  "homepage": "https://github.com/memcorrupt/fast-ssdeep#readme",
+  "devDependencies": {
+    "mocha": "^10.7.3"
+  },
+  "dependencies": {
+    "bindings": "^1.5.0"
+  }
+}
