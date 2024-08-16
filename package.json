@@ -1,6 +1,6 @@
 {
   "name": "fast-ssdeep",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Node.js binding for the ssdeep CTPH library",
   "main": "index.js",
   "engines": {
@@ -14,13 +14,11 @@
   "files": [
     "src",
     "test",
-
     "ssdeep/fuzzy.c",
     "ssdeep/edit_dist.c",
     "ssdeep/fuzzy.h",
     "ssdeep/edit_dist.h",
     "ssdeep/sum_table.h",
-
     "index.js",
     "binding.gyp"
   ],
