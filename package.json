@@ -1,6 +1,6 @@
 {
   "name": "fast-ssdeep",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Node.js binding for the ssdeep CTPH library",
   "main": "index.js",
   "types": "index.d.ts",
