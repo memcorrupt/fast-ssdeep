@@ -12,18 +12,17 @@
 #define FUZZYTASK_HASH 0
 #define FUZZYTASK_COMPARE 1
 
-#define NAPI_ERROR_RETURN_NULL return NULL;
+#define NAPI_INTERNAL_ERROR_MESSAGE "ssdeep node addon api internal error"
+#define FUZZY_OOM_MESSAGE "ssdeep could not allocate memory"
+
 #define NAPI_ERROR_RETHROW         \
-    napi_throw_error(env, NULL, "ssdeep node addon api internal error");
+    napi_throw_error(env, NULL, NAPI_INTERNAL_ERROR_MESSAGE);
 #define NAPI_ERROR_RETHROW_RETURN  \
     NAPI_ERROR_RETHROW             \
     return;
 #define NAPI_ERROR_RETHROW_RETURN_NULL  \
     NAPI_ERROR_RETHROW             \
     return NULL;
-#define NAPI_ERROR_RETHROW_CLEANUP \
-    NAPI_ERROR_RETHROW             \
-    goto cleanup;
 
 #define NAPI_CALL_BASE(env, call, onError) do {     \
     if((call) != napi_ok){                          \
@@ -31,17 +30,8 @@
     }                                               \
 } while(0)
 
-#define NAPI_ASSERT(env, cond) do {                 \
-    if(!(cond)){                                    \
-        NAPI_ERROR_RETHROW_RETURN_NULL              \
-    }                                               \
-} while(0)
-    
-
-#define NAPI_CALL(env, call) NAPI_CALL_BASE(env, call, NAPI_ERROR_RETURN_NULL)
 #define NAPI_CALL_OR_THROW(env, call) NAPI_CALL_BASE(env, call, NAPI_ERROR_RETHROW_RETURN_NULL)
 #define NAPI_CALL_OR_THROW_VOID(env, call) NAPI_CALL_BASE(env, call, NAPI_ERROR_RETHROW_RETURN)
-#define NAPI_CALL_OR_THROW_CLEANUP(env, call) NAPI_CALL_BASE(env, call, NAPI_ERROR_RETHROW_CLEANUP)
 
 struct FuzzySequenceContents {
     size_t length;
@@ -50,7 +40,6 @@ struct FuzzySequenceContents {
 
 struct FuzzyTask {
     napi_deferred deferred;
-    napi_value promise;
     napi_async_work work;
 
     unsigned char type;
@@ -58,7 +47,7 @@ struct FuzzyTask {
 
 struct FuzzyHashTask {
     struct FuzzyTask header;
-    
+
     struct FuzzySequenceContents *contents;
 
     int error;
@@ -78,6 +67,25 @@ struct FuzzyNodeMethod {
     napi_callback method;
     bool async;
 };
+
+static void FuzzyTaskFree(struct FuzzyTask *task){
+    if(task->type == FUZZYTASK_HASH)
+        free(((struct FuzzyHashTask *) task)->contents);
+
+    free(task);
+}
+
+static napi_status FuzzyRejectDeferred(napi_env env, napi_deferred deferred, const char *message){
+    napi_status status;
+    napi_value errorMsg, errorObj;
+
+    if((status = napi_create_string_latin1(env, message, NAPI_AUTO_LENGTH, &errorMsg)) != napi_ok)
+        return status;
+    if((status = napi_create_error(env, NULL, errorMsg, &errorObj)) != napi_ok)
+        return status;
+
+    return napi_reject_deferred(env, deferred, errorObj);
+}
 
 static void FuzzyWorkerExecute(napi_env env, void *data){
     struct FuzzyTask *task = (struct FuzzyTask *) data;
@@ -104,83 +112,104 @@ static void FuzzyWorkerExecute(napi_env env, void *data){
 static void FuzzyWorkerComplete(napi_env env, napi_status status, void *data){
     struct FuzzyTask *task = (struct FuzzyTask *) data;
 
-    if(status != napi_ok){
-        napi_throw_error(env, NULL, "ssdeep task scheduling failed");
-        goto cleanup;
-    }
-
     char formatBuf[256];
     const char *error = NULL;
-    napi_value result;
+    napi_value result = NULL;
 
-    switch(task->type){
-        case FUZZYTASK_HASH: {
-            struct FuzzyHashTask *hashTask = (struct FuzzyHashTask *) data;
-
-            if(hashTask->error){
-                snprintf(formatBuf, sizeof(formatBuf), "Could not calculate ssdeep hash: %s\n", strerror(hashTask->error));
-                error = formatBuf;
-            }else{
-                NAPI_CALL_OR_THROW_CLEANUP(env, napi_create_string_latin1(env, hashTask->result, NAPI_AUTO_LENGTH, &result));
-            }
-            break;
-        }
-        case FUZZYTASK_COMPARE: {
-            struct FuzzyCompareTask *compareTask = (struct FuzzyCompareTask *) data;
-
-            if(compareTask->result == -1){
-                error = "Could not compare malformed ssdeep hashes";
-            }else{
-                NAPI_CALL_OR_THROW_CLEANUP(env, napi_create_int32(env, compareTask->result, &result));
-            }
-            break;
-        }
-        default: {
-            napi_throw_error(env, NULL, "ssdeep can't complete invalid worker task");
-            goto cleanup;
-        }
-    }
-
-    if(error){
-        napi_value errorMsg;
-        NAPI_CALL_OR_THROW_CLEANUP(env, napi_create_string_latin1(env, error, NAPI_AUTO_LENGTH, &errorMsg));
-
-        napi_value errorObj;
-        NAPI_CALL_OR_THROW_CLEANUP(env, napi_create_error(env, NULL, errorMsg, &errorObj));
-
-        NAPI_CALL_OR_THROW_CLEANUP(env, napi_reject_deferred(env, task->deferred, errorObj));
+    if(status != napi_ok){
+        error = "ssdeep task scheduling failed";
     }else{
-        NAPI_CALL_OR_THROW_CLEANUP(env, napi_resolve_deferred(env, task->deferred, result));
+        switch(task->type){
+            case FUZZYTASK_HASH: {
+                struct FuzzyHashTask *hashTask = (struct FuzzyHashTask *) data;
+
+                if(hashTask->error){
+                    snprintf(formatBuf, sizeof(formatBuf), "Could not calculate ssdeep hash: %s", strerror(hashTask->error));
+                    error = formatBuf;
+                }else if(napi_create_string_latin1(env, hashTask->result, NAPI_AUTO_LENGTH, &result) != napi_ok){
+                    error = NAPI_INTERNAL_ERROR_MESSAGE;
+                }
+                break;
+            }
+            case FUZZYTASK_COMPARE: {
+                struct FuzzyCompareTask *compareTask = (struct FuzzyCompareTask *) data;
+
+                if(compareTask->result == -1){
+                    error = "Could not compare malformed ssdeep hashes";
+                }else if(napi_create_int32(env, compareTask->result, &result) != napi_ok){
+                    error = NAPI_INTERNAL_ERROR_MESSAGE;
+                }
+                break;
+            }
+            default: {
+                error = "ssdeep can't complete invalid worker task";
+                break;
+            }
+        }
     }
 
-cleanup:
-    if(task->type == FUZZYTASK_HASH){
-        struct FuzzyHashTask *hashTask = (struct FuzzyHashTask *) data;
-        free(hashTask->contents);
-    }
+    napi_status settled = error
+        ? FuzzyRejectDeferred(env, task->deferred, error)
+        : napi_resolve_deferred(env, task->deferred, result);
 
-    status = napi_delete_async_work(env, task->work);
-    free(task);
+    napi_status deleted = napi_delete_async_work(env, task->work);
+    FuzzyTaskFree(task);
 
-    NAPI_CALL_OR_THROW_VOID(env, status);
+    NAPI_CALL_OR_THROW_VOID(env, settled);
+    NAPI_CALL_OR_THROW_VOID(env, deleted);
+}
+
+static napi_value FuzzyScheduleTask(napi_env env, struct FuzzyTask *task, const char *resourceName){
+    napi_value resource, promise;
+
+    if(napi_create_string_utf8(env, resourceName, NAPI_AUTO_LENGTH, &resource) != napi_ok)
+        goto fail;
+    if(napi_create_async_work(env, NULL, resource, FuzzyWorkerExecute, FuzzyWorkerComplete, task, &task->work) != napi_ok)
+        goto fail;
+    if(napi_create_promise(env, &task->deferred, &promise) != napi_ok)
+        goto fail_work;
+    if(napi_queue_async_work(env, task->work) != napi_ok)
+        goto fail_promise;
+
+    return promise;
+
+fail_promise:
+    FuzzyRejectDeferred(env, task->deferred, "ssdeep task scheduling failed");
+    napi_delete_async_work(env, task->work);
+    FuzzyTaskFree(task);
+    return promise;
+
+fail_work:
+    napi_delete_async_work(env, task->work);
+fail:
+    FuzzyTaskFree(task);
+    NAPI_ERROR_RETHROW_RETURN_NULL
 }
 
 struct FuzzySequenceContents *FuzzyGetSequenceContents(napi_env env, napi_value value, const char *errorMessage){
     napi_valuetype valueType;
-    NAPI_CALL(env, napi_typeof(env, value, &valueType));
+    NAPI_CALL_OR_THROW(env, napi_typeof(env, value, &valueType));
 
     bool isString = valueType == napi_string;
     size_t inputSize;
     struct FuzzySequenceContents *contents;
 
     if(isString){
-        NAPI_CALL(env, napi_get_value_string_latin1(env, value, NULL, 0, &inputSize));
+        NAPI_CALL_OR_THROW(env, napi_get_value_string_latin1(env, value, NULL, 0, &inputSize));
 
         contents = (struct FuzzySequenceContents *) malloc(sizeof(struct FuzzySequenceContents) + inputSize + 1);
-        NAPI_CALL(env, napi_get_value_string_latin1(env, value, contents->data, inputSize + 1, &inputSize));
+        if(contents == NULL){
+            napi_throw_error(env, NULL, FUZZY_OOM_MESSAGE);
+            return NULL;
+        }
+
+        if(napi_get_value_string_latin1(env, value, contents->data, inputSize + 1, &inputSize) != napi_ok){
+            free(contents);
+            NAPI_ERROR_RETHROW_RETURN_NULL
+        }
     }else{
         bool isBuffer;
-        NAPI_CALL(env, napi_is_buffer(env, value, &isBuffer));
+        NAPI_CALL_OR_THROW(env, napi_is_buffer(env, value, &isBuffer));
 
         if(!isBuffer){
             napi_throw_type_error(env, NULL, errorMessage);
@@ -188,9 +217,14 @@ struct FuzzySequenceContents *FuzzyGetSequenceContents(napi_env env, napi_value 
         }
 
         char *origBuf;
-        NAPI_CALL(env, napi_get_buffer_info(env, value, (void **)&origBuf, &inputSize));
+        NAPI_CALL_OR_THROW(env, napi_get_buffer_info(env, value, (void **)&origBuf, &inputSize));
 
         contents = (struct FuzzySequenceContents *) malloc(sizeof(struct FuzzySequenceContents) + inputSize);
+        if(contents == NULL){
+            napi_throw_error(env, NULL, FUZZY_OOM_MESSAGE);
+            return NULL;
+        }
+
         memcpy(contents->data, origBuf, inputSize);
     }
 
@@ -208,48 +242,45 @@ static napi_value FuzzyHash(napi_env env, napi_callback_info cbinfo){
     bool async = *asyncPtr;
 
     if(argc < 1){
-        NAPI_CALL(env, napi_throw_type_error(env, NULL, "1 argument expected"));
+        napi_throw_type_error(env, NULL, "1 argument expected");
+        return NULL;
     }
 
     struct FuzzySequenceContents *contents = FuzzyGetSequenceContents(env, args[0], "first argument must be a string/buffer");
-    NAPI_ASSERT(env, contents != NULL);
-
-    struct FuzzyHashTask *task = (struct FuzzyHashTask *) malloc(sizeof(struct FuzzyHashTask));
-    NAPI_ASSERT(env, task != NULL);
+    if(contents == NULL)
+        return NULL;
 
     if(async){
-        task->contents = contents;
-        task->error = 0;
-        task->header.type = FUZZYTASK_HASH;
-
-        NAPI_CALL_OR_THROW(env, napi_create_promise(env, &task->header.deferred, &task->header.promise));
-
-        napi_value resourceName;
-        NAPI_CALL_OR_THROW(env, napi_create_string_utf8(env, "fast-ssdeep: hash", NAPI_AUTO_LENGTH, &resourceName));
-
-        NAPI_CALL_OR_THROW(env, napi_create_async_work(env, NULL, resourceName, FuzzyWorkerExecute, FuzzyWorkerComplete, task, &task->header.work));
-        NAPI_CALL_OR_THROW(env, napi_queue_async_work(env, task->header.work));
-
-        return task->header.promise;
-    }else{
-        char hash[FUZZY_MAX_RESULT];
-        if(!fuzzy_hash_buf((unsigned char *)contents->data, contents->length, hash)){
-            napi_value result;
-            NAPI_CALL_OR_THROW_CLEANUP(env, napi_create_string_latin1(env, hash, NAPI_AUTO_LENGTH, &result));
-
-            return result;
-        }else{
-            int error = errno;
-
-            char formatErr[256];
-            snprintf(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s\n", strerror(error));
-
-            napi_throw_error(env, NULL, formatErr);
+        struct FuzzyHashTask *task = (struct FuzzyHashTask *) malloc(sizeof(struct FuzzyHashTask));
+        if(task == NULL){
+            free(contents);
+            napi_throw_error(env, NULL, FUZZY_OOM_MESSAGE);
+            return NULL;
         }
 
-cleanup:
+        task->header.type = FUZZYTASK_HASH;
+        task->contents = contents;
+        task->error = 0;
+
+        return FuzzyScheduleTask(env, &task->header, "fast-ssdeep: hash");
+    }else{
+        char hash[FUZZY_MAX_RESULT];
+        int failed = fuzzy_hash_buf((unsigned char *)contents->data, contents->length, hash);
+        int error = errno;
         free(contents);
-        return NULL;
+
+        if(failed){
+            char formatErr[256];
+            snprintf(formatErr, sizeof(formatErr), "Could not calculate ssdeep hash: %s", strerror(error));
+
+            napi_throw_error(env, NULL, formatErr);
+            return NULL;
+        }
+
+        napi_value result;
+        NAPI_CALL_OR_THROW(env, napi_create_string_latin1(env, hash, NAPI_AUTO_LENGTH, &result));
+
+        return result;
     }
 }
 
@@ -263,61 +294,61 @@ static napi_value FuzzyCompare(napi_env env, napi_callback_info cbinfo){
     bool async = *asyncPtr;
 
     if(argc < 2){
-        NAPI_CALL(env, napi_throw_type_error(env, NULL, "2 arguments expected"));
+        napi_throw_type_error(env, NULL, "2 arguments expected");
+        return NULL;
     }
 
-    struct FuzzyCompareTask *task;
+    struct FuzzyCompareTask *task = NULL;
     FuzzyCompareHashes hashes;
-    char (*hashesPtr)[FUZZY_MAX_RESULT + 1];
-    
+    char (*hashesPtr)[FUZZY_MAX_RESULT + 1] = hashes;
+
     if(async){
         task = (struct FuzzyCompareTask *) malloc(sizeof(struct FuzzyCompareTask));
-        NAPI_ASSERT(env, task != NULL);
+        if(task == NULL){
+            napi_throw_error(env, NULL, FUZZY_OOM_MESSAGE);
+            return NULL;
+        }
 
         task->header.type = FUZZYTASK_COMPARE;
         task->result = -1;
 
         hashesPtr = task->hashes;
-    }else{
-        hashesPtr = hashes;
     }
 
     for(int i = 0; i < 2; i++){
         napi_valuetype argType;
-        NAPI_CALL_OR_THROW(env, napi_typeof(env, args[i], &argType));
-        
+        if(napi_typeof(env, args[i], &argType) != napi_ok){
+            free(task);
+            NAPI_ERROR_RETHROW_RETURN_NULL
+        }
+
         if(argType != napi_string){
-            NAPI_CALL(env, napi_throw_type_error(env, NULL,
-                i == 0 ? "first argument must be a string" : "second argument must be a string"));
+            free(task);
+            napi_throw_type_error(env, NULL,
+                i == 0 ? "first argument must be a string" : "second argument must be a string");
+            return NULL;
         }
 
-        NAPI_CALL_OR_THROW(env, napi_get_value_string_latin1(env, args[i], hashesPtr[i], FUZZY_MAX_RESULT + 1, NULL));
+        if(napi_get_value_string_latin1(env, args[i], hashesPtr[i], FUZZY_MAX_RESULT + 1, NULL) != napi_ok){
+            free(task);
+            NAPI_ERROR_RETHROW_RETURN_NULL
+        }
     }
-    
-    if(async){
-        NAPI_CALL_OR_THROW(env, napi_create_promise(env, &task->header.deferred, &task->header.promise));
 
-        napi_value resourceName;
-        NAPI_CALL_OR_THROW(env, napi_create_string_utf8(env, "fast-ssdeep: compare", NAPI_AUTO_LENGTH, &resourceName));
+    if(async)
+        return FuzzyScheduleTask(env, &task->header, "fast-ssdeep: compare");
 
-        NAPI_CALL_OR_THROW(env, napi_create_async_work(env, NULL, resourceName, FuzzyWorkerExecute, FuzzyWorkerComplete, task, &task->header.work));
-        NAPI_CALL_OR_THROW(env, napi_queue_async_work(env, task->header.work));
+    int score = fuzzy_compare(hashes[0], hashes[1]);
 
-        return task->header.promise;
-    }else{
-        int score = fuzzy_compare(hashes[0], hashes[1]);
-
-        if(score != -1){
-            napi_value result;
-            NAPI_CALL_OR_THROW(env, napi_create_int32(env, score, &result));
-
-            return result;
-        }else{
-            NAPI_CALL(env, napi_throw_error(env, NULL, "Could not compare malformed ssdeep hashes")); 
-        }
-
+    if(score == -1){
+        napi_throw_error(env, NULL, "Could not compare malformed ssdeep hashes");
         return NULL;
     }
+
+    napi_value result;
+    NAPI_CALL_OR_THROW(env, napi_create_int32(env, score, &result));
+
+    return result;
 }
 
 const struct FuzzyNodeMethod functions[] = {
